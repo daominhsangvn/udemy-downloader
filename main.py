@@ -48,7 +48,7 @@ info = None
 keys = {}
 id_as_course_name = False
 is_subscription_course = False
-
+output_dir = ""
 
 # from https://stackoverflow.com/a/21978778/9785713
 def log_subprocess_output(prefix: str, pipe: IO[bytes]):
@@ -60,11 +60,9 @@ def log_subprocess_output(prefix: str, pipe: IO[bytes]):
 
 # this is the first function that is called, we parse the arguments, setup the logger, and ensure that required directories exist
 def pre_run():
-    global cookies, dl_assets, skip_lectures, dl_captions, caption_locale, quality, bearer_token, portal_name, course_name, keep_vtt, skip_hls, concurrent_downloads, disable_ipv6, load_from_file, save_to_file, bearer_token, course_url, info, logger, keys, id_as_course_name, is_subscription_course, LOG_LEVEL
+    global cookies, dl_assets, skip_lectures, dl_captions, caption_locale, quality, bearer_token, portal_name, course_name, keep_vtt, skip_hls, concurrent_downloads, disable_ipv6, load_from_file, save_to_file, bearer_token, course_url, info, logger, keys, id_as_course_name, is_subscription_course, LOG_LEVEL, output_dir
 
-    # make sure the directory exists
-    if not os.path.exists(DOWNLOAD_DIR):
-        os.makedirs(DOWNLOAD_DIR)
+    output_dir = DOWNLOAD_DIR
 
     # make sure the logs directory exists
     if not os.path.exists(LOG_DIR_PATH):
@@ -99,6 +97,13 @@ def pre_run():
         dest="concurrent_downloads",
         type=int,
         help="The number of maximum concurrent downloads for segments (HLS and DASH, must be a number 1-30)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        dest="output_dir",
+        type=str,
+        help="The output dir",
     )
     parser.add_argument(
         "--disable-ipv6",
@@ -166,7 +171,7 @@ def pre_run():
         dest="load_from_file",
         action="store_true",
         help="If specified, course content will be loaded from a previously saved file with --save-to-file, this can reduce processing time (Note that asset links expire after a certain amount of time)",
-    )
+    )    
     parser.add_argument(
         "--log-level",
         dest="log_level",
@@ -211,6 +216,8 @@ def pre_run():
         course_url = args.course_url
     if args.info:
         info = args.info
+    if args.output_dir:
+        output_dir = args.output_dir
     if args.log_level:
         if args.log_level.upper() == "DEBUG":
             LOG_LEVEL = logging.DEBUG
@@ -225,6 +232,10 @@ def pre_run():
         else:
             print(f"Invalid log level: {args.log_level}; Using INFO")
             LOG_LEVEL = logging.INFO
+
+    # make sure the directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # setup a logger
     logger = logging.getLogger(__name__)
@@ -255,7 +266,7 @@ def pre_run():
     if args.is_subscription_course:
         is_subscription_course = args.is_subscription_course
 
-    Path(DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
     Path(SAVED_DIR).mkdir(parents=True, exist_ok=True)
 
     # Get the keys
@@ -1267,7 +1278,8 @@ def parse_new(_udemy):
     logger.info(f"Lecture(s) ({total_lectures})")
 
     course_name = str(_udemy.get("course_id")) if id_as_course_name else _udemy.get("course_title")
-    course_dir = os.path.join(DOWNLOAD_DIR, course_name)
+    course_dir = os.path.join(output_dir, course_name)
+    
     if not os.path.exists(course_dir):
         os.mkdir(course_dir)
 
