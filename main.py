@@ -757,6 +757,17 @@ class Udemy:
         portal_name = self.extract_portal_name(url)
         return course_id, portal_name
 
+    def _extract_course_last_updated(self, url):
+        course_html = self.session._get(url).text
+        soup = BeautifulSoup(course_html, "lxml")
+        data = soup.find("div", {"class": "last-update-date"})
+        if not data:
+            logger.fatal("Unable to extract arguments from course page! Make sure you have a cookies.txt file!")
+            self.session.terminate()
+            sys.exit(1)
+        last_updated = data.getText()
+        return last_updated
+
     def _extract_course_info(self, url):
         portal_name, course_name = self.extract_course_name(url)
         course = {}
@@ -778,7 +789,11 @@ class Udemy:
             course_id, portal_name = self._extract_subscription_course_info(url)
             course = self._extract_course_info_json(url, course_id, portal_name)
 
+        last_updated = self._extract_course_last_updated(url)
+        last_updated = last_updated.replace("Last updated", "").strip(" ").replace("/", "-")
+
         if course:
+            course.update({"last_updated": last_updated})
             course.update({"portal_name": portal_name})
             return course.get("id"), course
         if not course:
@@ -1274,11 +1289,13 @@ def process_lecture(lecture, lecture_path, lecture_file_name, chapter_dir):
 def parse_new(_udemy):
     total_chapters = _udemy.get("total_chapters")
     total_lectures = _udemy.get("total_lectures")
+    last_updated = _udemy.get("last_updated")
     logger.info(f"Chapter(s) ({total_chapters})")
     logger.info(f"Lecture(s) ({total_lectures})")
 
     course_name = str(_udemy.get("course_id")) if id_as_course_name else _udemy.get("course_title")
-    course_dir = os.path.join(output_dir, course_name)
+    course_dir_name = course_name + "-" + last_updated
+    course_dir = os.path.join(output_dir, course_dir_name)
     
     if not os.path.exists(course_dir):
         os.mkdir(course_dir)
@@ -1483,6 +1500,7 @@ def main():
         if course_info and isinstance(course_info, dict):
             title = sanitize_filename(course_info.get("title"))
             course_title = course_info.get("published_title")
+            course_last_updated = course_info.get("last_updated")
             portal_name = course_info.get("portal_name")
 
     logger.info("> Fetching course content, this may take a minute...")
@@ -1490,6 +1508,7 @@ def main():
         course_json = json.loads(open(os.path.join(os.getcwd(), "saved", "course_content.json"), encoding="utf8", mode="r").read())
         title = course_json.get("title")
         course_title = course_json.get("published_title")
+        course_last_updated = course_json.get("last_updated")
         portal_name = course_json.get("portal_name")
     else:
         course_json = udemy._extract_course_json(course_url, course_id, portal_name)
@@ -1514,6 +1533,7 @@ def main():
         _udemy["course_id"] = course_id
         _udemy["title"] = title
         _udemy["course_title"] = course_title
+        _udemy["last_updated"] = course_last_updated
         _udemy["chapters"] = []
         counter = -1
 
